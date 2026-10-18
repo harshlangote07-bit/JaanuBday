@@ -10,11 +10,7 @@ type Env = {
 };
 
 type ServerEntry = {
-  fetch: (
-    request: Request,
-    env: unknown,
-    ctx: unknown,
-  ) => Promise<Response> | Response;
+  fetch: (request: Request) => Promise<Response> | Response;
 };
 
 let serverEntryPromise: Promise<ServerEntry> | undefined;
@@ -31,7 +27,11 @@ async function getServerEntry(): Promise<ServerEntry> {
 const COOKIE_NAME = "jaanu_bday_access";
 const SESSION_SECONDS = 7 * 24 * 60 * 60;
 
-function htmlResponse(html: string, status = 200, headers: HeadersInit = {}) {
+function htmlResponse(
+  html: string,
+  status = 200,
+  headers: HeadersInit = {},
+): Response {
   return new Response(html, {
     status,
     headers: {
@@ -42,7 +42,7 @@ function htmlResponse(html: string, status = 200, headers: HeadersInit = {}) {
   });
 }
 
-function loginPage() {
+function loginPage(): string {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -190,6 +190,7 @@ async function handleUnlock(
   }
 
   const origin = request.headers.get("origin");
+
   if (origin) {
     try {
       if (new URL(origin).host !== new URL(request.url).host) {
@@ -212,7 +213,10 @@ async function handleUnlock(
   try {
     body = (await request.json()) as { code?: unknown };
   } catch {
-    return Response.json({ error: "Invalid request" }, { status: 400 });
+    return Response.json(
+      { error: "Invalid request" },
+      { status: 400 },
+    );
   }
 
   const supplied = typeof body.code === "string" ? body.code : "";
@@ -226,6 +230,7 @@ async function handleUnlock(
   }
 
   let difference = 0;
+
   for (let i = 0; i < 6; i++) {
     difference |= supplied.charCodeAt(i) ^ expected.charCodeAt(i);
   }
@@ -244,20 +249,21 @@ async function handleUnlock(
     { ok: true },
     {
       headers: {
-        "set-cookie": `${COOKIE_NAME}=${timestamp}.${signature}; Path=/; Max-Age=${SESSION_SECONDS}; HttpOnly; Secure; SameSite=Lax`,
+        "set-cookie":
+          `${COOKIE_NAME}=${timestamp}.${signature}; Path=/; Max-Age=${SESSION_SECONDS}; HttpOnly; Secure; SameSite=Lax`,
         "cache-control": "no-store",
       },
     },
   );
 }
 
-// Preserve the existing SSR error handling.
 function isH3SwallowedErrorBody(body: string): boolean {
   try {
     const payload = JSON.parse(body) as {
       unhandled?: unknown;
       message?: unknown;
     };
+
     return payload.unhandled === true && payload.message === "HTTPError";
   } catch {
     return false;
@@ -276,25 +282,46 @@ async function normalizeCatastrophicSsrResponse(
   if (!isH3SwallowedErrorBody(body)) return response;
 
   console.error(
-    consumeLastCapturedError() ?? new Error(`h3 swallowed SSR error: ${body}`),
+    consumeLastCapturedError() ??
+      new Error(`h3 swallowed SSR error: ${body}`),
   );
 
   return htmlResponse(renderErrorPage(), 500);
 }
 
+/**
+ * IMPORTANT:
+ * TanStack Start may invoke this entry as an internal SSR handler with
+ * only a Request. Cloudflare's Worker env is not guaranteed to be passed
+ * to this function. Never assume secrets exist here.
+ */
+
 export default {
-  async fetch(request: Request, env: unknown, ctx: unknown) {
+  async fetch(request: Request, env?: Env, ctx?: unknown) {
     try {
-      const runtimeEnv = env as Env;
+      // Nitro sets this from the actual Cloudflare Worker environment.
+      const workerEnv = (
+        globalThis as typeof globalThis & { __env__?: Env }
+      ).__env__;
+
+      const runtimeEnv = env ?? workerEnv;
       const url = new URL(request.url);
+
+      // Never allow access if the secrets aren't available.
+      if (
+        !runtimeEnv?.BIRTHDAY_PASSCODE ||
+        !runtimeEnv?.SESSION_SECRET
+      ) {
+        return url.pathname === "/__birthday_unlock"
+          ? Response.json(
+              { error: "Password protection is not configured." },
+              { status: 503, headers: { "cache-control": "no-store" } },
+            )
+          : htmlResponse(loginPage(), 503);
+      }
 
       if (url.pathname === "/__birthday_unlock") {
         return await handleUnlock(request, runtimeEnv);
-      }
-
-      // Fail closed if either Cloudflare secret is missing.
-      if (!runtimeEnv.BIRTHDAY_PASSCODE || !runtimeEnv.SESSION_SECRET) {
-        return htmlResponse(loginPage(), 503);
       }
 
       if (!(await hasValidSession(request, runtimeEnv.SESSION_SECRET))) {
@@ -302,12 +329,11 @@ export default {
       }
 
       const handler = await getServerEntry();
-      const response = await handler.fetch(request, env, ctx);
+      const response = await handler.fetch(request);
 
       return await normalizeCatastrophicSsrResponse(response);
     } catch (error) {
       console.error(error);
-
       return htmlResponse(renderErrorPage(), 500);
     }
   },
