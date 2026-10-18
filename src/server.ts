@@ -13,177 +13,118 @@ type ServerEntry = {
   fetch: (request: Request) => Promise<Response> | Response;
 };
 
+let serverEntryPromise: Promise<ServerEntry> | undefined;
+
+async function getServerEntry(): Promise<ServerEntry> {
+  if (!serverEntryPromise) {
+    serverEntryPromise = import("@tanstack/react-start/server-entry").then(
+      (m) => (m.default ?? m) as ServerEntry,
+    );
+  }
+  return serverEntryPromise;
+}
+
 const COOKIE_NAME = "jaanu_bday_access";
-const SESSION_DURATION_SECONDS = 7 * 24 * 60 * 60;
+const SESSION_SECONDS = 7 * 24 * 60 * 60;
 
 function htmlResponse(
   html: string,
   status = 200,
-  headers?: HeadersInit,
+  headers: HeadersInit = {},
 ): Response {
-  const responseHeaders = new Headers(headers);
-  responseHeaders.set("content-type", "text/html; charset=utf-8");
-  responseHeaders.set("cache-control", "no-store");
-
   return new Response(html, {
     status,
-    headers: responseHeaders,
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "no-store",
+      ...headers,
+    },
   });
 }
 
-function getEnv(env?: Env): Env {
-  const globalEnv = (
-    globalThis as typeof globalThis & { __env__?: Env }
-  ).__env__;
-
-  return env ?? globalEnv ?? {};
-}
-
-async function getServerEntry(): Promise<ServerEntry> {
-  const serverModule = (await import(
-    "@tanstack/react-start/server-entry"
-  )) as {
-    default?: ServerEntry;
-    fetch?: ServerEntry["fetch"];
-  };
-
-  const entry = serverModule.default ?? serverModule;
-
-  if (typeof entry.fetch !== "function") {
-    throw new Error("TanStack server entry does not expose fetch().");
-  }
-
-  return entry as ServerEntry;
-}
-
-function loginPage(message = ""): string {
-  const safeMessage = message
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-
+function loginPage(): string {
   return `<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>A Little Surprise</title>
-  <meta name="robots" content="noindex,nofollow">
-  <style>
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      min-height: 100vh;
-      display: grid;
-      place-items: center;
-      padding: 24px;
-      background: linear-gradient(145deg, #fff0f4, #fce7f3, #fff7ed);
-      color: #54243a;
-      font-family: Georgia, "Times New Roman", serif;
-    }
-    main {
-      width: min(100%, 390px);
-      padding: 34px 26px;
-      text-align: center;
-      background: rgba(255,255,255,.88);
-      border: 1px solid #f3c9d8;
-      border-radius: 24px;
-      box-shadow: 0 20px 70px rgba(120,40,75,.12);
-    }
-    .heart { font-size: 42px; }
-    h1 { margin: 12px 0; font-size: 30px; }
-    p { color: #87556b; line-height: 1.6; }
-    input, button {
-      width: 100%;
-      min-height: 48px;
-      border-radius: 12px;
-      font: inherit;
-    }
-    input {
-      margin: 12px 0;
-      padding: 12px;
-      text-align: center;
-      letter-spacing: 8px;
-      border: 1px solid #e8b5c8;
-      outline-color: #c95c86;
-      background: white;
-      font-family: sans-serif;
-      font-size: 20px;
-    }
-    button {
-      border: 0;
-      color: white;
-      background: #b83d70;
-      cursor: pointer;
-    }
-    button:disabled { opacity: .65; cursor: wait; }
-    #message { min-height: 24px; font-size: 14px; }
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#100e0d">
+<title>A little universe</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;min-height:100svh;display:grid;place-items:center;padding:24px;
+background:radial-gradient(ellipse at 50% 35%,#39291d,#191310 42%,#0c0b0b 80%);
+color:#f5eee5;font-family:Georgia,'Times New Roman',serif}
+main{width:min(100%,410px);text-align:center;padding:44px 28px;
+border:1px solid #c7a36b42;background:#100e0dc9;
+box-shadow:0 25px 100px #0008}
+.mark{color:#d9b779;font-size:30px;margin-bottom:26px}
+.eyebrow{font:10px Arial,sans-serif;letter-spacing:.28em;
+text-transform:uppercase;color:#c7b9a5}
+h1{font-size:clamp(32px,8vw,45px);font-weight:400;line-height:1.1;margin:18px 0}
+p{color:#bfb4a7;font:13px/1.8 Arial,sans-serif;margin:0 auto 27px;max-width:280px}
+input{display:block;width:100%;text-align:center;letter-spacing:.55em;
+font:22px Arial,sans-serif;color:#f5eee5;background:#ffffff08;
+border:1px solid #c7a36b66;padding:15px;margin-bottom:14px;outline:none}
+input:focus{border-color:#d9b779}
+button{width:100%;border:0;padding:16px;background:#d7b477;color:#19120c;
+font:11px Arial,sans-serif;letter-spacing:.2em;text-transform:uppercase;cursor:pointer}
+button:disabled{opacity:.6}
+#error{color:#e8a69b;min-height:20px;font:12px Arial,sans-serif;margin-top:15px}
+</style>
 </head>
 <body>
-  <main>
-    <div class="heart" aria-hidden="true">♡</div>
-    <h1>A little surprise</h1>
-    <p>Enter your special code to open your birthday surprise.</p>
-    <form id="unlock-form">
-      <label for="code">Your six-digit code</label>
-      <input id="code" name="code" type="password"
-        inputmode="numeric" pattern="[0-9]{6}" maxlength="6"
-        autocomplete="one-time-code" required>
-      <button id="submit" type="submit">Open my surprise</button>
-    </form>
-    <p id="message" role="status">${safeMessage}</p>
-  </main>
-  <script>
-    const form = document.getElementById("unlock-form");
-    const input = document.getElementById("code");
-    const button = document.getElementById("submit");
-    const message = document.getElementById("message");
-
-    form.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      message.textContent = "";
-      button.disabled = true;
-      button.textContent = "Checking…";
-
-      try {
-        const response = await fetch("/__birthday_unlock", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          credentials: "same-origin",
-          body: JSON.stringify({ code: input.value })
-        });
-
-        const result = await response.json().catch(() => ({}));
-
-        if (response.ok && result.ok) {
-          window.location.replace("/");
-          return;
-        }
-
-        message.textContent = result.error ||
-          (response.status === 503
-            ? "Password protection is not configured on the server."
-            : "That code is incorrect. Please try again.");
-      } catch {
-        message.textContent = "Could not connect. Please try again.";
-      } finally {
-        button.disabled = false;
-        button.textContent = "Open my surprise";
-      }
+<main>
+<div class="mark">♡</div>
+<div class="eyebrow">A little universe, made for you</div>
+<h1>One little secret.</h1>
+<p>This story is just for you. Enter the special code to open it.</p>
+<form id="unlock">
+<input id="code" type="password" inputmode="numeric" pattern="[0-9]{6}"
+maxlength="6" minlength="6" autocomplete="one-time-code"
+placeholder="••••••" aria-label="Six digit access code" required>
+<button type="submit">Open your story →</button>
+<div id="error" role="status" aria-live="polite"></div>
+</form>
+</main>
+<script>
+const form=document.getElementById('unlock');
+const input=document.getElementById('code');
+const error=document.getElementById('error');
+const button=form.querySelector('button');
+form.addEventListener('submit',async e=>{
+  e.preventDefault();
+  error.textContent='';
+  button.disabled=true;
+  button.textContent='Opening…';
+  try{
+    const response=await fetch('/__birthday_unlock',{
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({code:input.value})
     });
-  </script>
+    if(response.ok){location.replace('/');return;}
+    error.textContent=response.status===503
+      ?'Password protection is not configured yet.'
+      :'That code didn’t match. Try again.';
+    input.value='';
+    input.focus();
+  }catch{
+    error.textContent='Could not connect. Please try again.';
+  }finally{
+    button.disabled=false;
+    button.textContent='Open your story →';
+  }
+});
+</script>
 </body>
 </html>`;
 }
 
 async function sign(value: string, secret: string): Promise<string> {
-  const encoder = new TextEncoder();
   const key = await crypto.subtle.importKey(
     "raw",
-    encoder.encode(secret),
+    new TextEncoder().encode(secret),
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"],
@@ -192,24 +133,12 @@ async function sign(value: string, secret: string): Promise<string> {
   const signature = await crypto.subtle.sign(
     "HMAC",
     key,
-    encoder.encode(value),
+    new TextEncoder().encode(value),
   );
 
-  return Array.from(new Uint8Array(signature))
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-function constantTimeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-
-  let difference = 0;
-
-  for (let i = 0; i < a.length; i++) {
-    difference |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  }
-
-  return difference === 0;
+  return Array.from(new Uint8Array(signature), (b) =>
+    b.toString(16).padStart(2, "0"),
+  ).join("");
 }
 
 async function hasValidSession(
@@ -220,21 +149,15 @@ async function hasValidSession(
   const cookie = cookieHeader
     .split(";")
     .map((part) => part.trim())
-    .find((part) => part.startsWith(COOKIE_NAME + "="));
+    .find((part) => part.startsWith(`${COOKIE_NAME}=`));
 
   if (!cookie) return false;
 
-  const value = cookie.slice(COOKIE_NAME.length + 1);
-  const separator = value.indexOf(".");
+  const [timestamp, signature, extra] = cookie
+    .slice(COOKIE_NAME.length + 1)
+    .split(".");
 
-  if (separator < 1) return false;
-
-  const timestamp = value.slice(0, separator);
-  const signature = value.slice(separator + 1);
-
-  if (!/^\d+$/.test(timestamp) || !/^[a-f0-9]{64}$/i.test(signature)) {
-    return false;
-  }
+  if (!timestamp || !signature || extra) return false;
 
   const issuedAt = Number(timestamp);
   const now = Math.floor(Date.now() / 1000);
@@ -242,13 +165,20 @@ async function hasValidSession(
   if (
     !Number.isSafeInteger(issuedAt) ||
     issuedAt > now + 60 ||
-    now - issuedAt > SESSION_DURATION_SECONDS
+    now - issuedAt > SESSION_SECONDS
   ) {
     return false;
   }
 
   const expected = await sign(timestamp, secret);
-  return constantTimeEqual(signature, expected);
+  if (expected.length !== signature.length) return false;
+
+  let difference = 0;
+  for (let i = 0; i < expected.length; i++) {
+    difference |= expected.charCodeAt(i) ^ signature.charCodeAt(i);
+  }
+
+  return difference === 0;
 }
 
 async function handleUnlock(
@@ -256,85 +186,88 @@ async function handleUnlock(
   env: Env,
 ): Promise<Response> {
   if (request.method !== "POST") {
-    return Response.json(
-      { error: "Method not allowed." },
-      {
-        status: 405,
-        headers: { allow: "POST", "cache-control": "no-store" },
-      },
-    );
+    return new Response("Method not allowed", { status: 405 });
   }
 
-  const url = new URL(request.url);
   const origin = request.headers.get("origin");
 
   if (origin) {
     try {
-      if (new URL(origin).host !== url.host) {
-        return Response.json(
-          { error: "Invalid request origin." },
-          { status: 403, headers: { "cache-control": "no-store" } },
-        );
+      if (new URL(origin).host !== new URL(request.url).host) {
+        return new Response("Forbidden", { status: 403 });
       }
     } catch {
-      return Response.json(
-        { error: "Invalid request origin." },
-        { status: 403, headers: { "cache-control": "no-store" } },
-      );
+      return new Response("Forbidden", { status: 403 });
     }
   }
 
-  const passcode = env.BIRTHDAY_PASSCODE;
-  const sessionSecret = env.SESSION_SECRET;
-
-  if (!passcode || !sessionSecret) {
+  if (!env.BIRTHDAY_PASSCODE || !env.SESSION_SECRET) {
     return Response.json(
-      { error: "Password protection is not configured on the server." },
+      { error: "Password protection is not configured." },
       { status: 503, headers: { "cache-control": "no-store" } },
     );
   }
 
-  let body: unknown;
+  let body: { code?: unknown };
 
   try {
-    body = await request.json();
+    body = (await request.json()) as { code?: unknown };
   } catch {
     return Response.json(
-      { error: "Invalid request body." },
-      { status: 400, headers: { "cache-control": "no-store" } },
+      { error: "Invalid request" },
+      { status: 400 },
     );
   }
 
-  const code =
-    typeof body === "object" &&
-    body !== null &&
-    "code" in body &&
-    typeof body.code === "string"
-      ? body.code
-      : "";
+  const supplied = typeof body.code === "string" ? body.code : "";
+  const expected = env.BIRTHDAY_PASSCODE;
 
-  if (!/^\d{6}$/.test(code) || !constantTimeEqual(code, passcode)) {
+  if (!/^\d{6}$/.test(supplied) || !/^\d{6}$/.test(expected)) {
     return Response.json(
-      { error: "Incorrect code. Please try again." },
+      { error: "Incorrect code" },
+      { status: 401, headers: { "cache-control": "no-store" } },
+    );
+  }
+
+  let difference = 0;
+
+  for (let i = 0; i < 6; i++) {
+    difference |= supplied.charCodeAt(i) ^ expected.charCodeAt(i);
+  }
+
+  if (difference !== 0) {
+    return Response.json(
+      { error: "Incorrect code" },
       { status: 401, headers: { "cache-control": "no-store" } },
     );
   }
 
   const timestamp = String(Math.floor(Date.now() / 1000));
-  const signature = await sign(timestamp, sessionSecret);
-  const cookieValue = `${timestamp}.${signature}`;
+  const signature = await sign(timestamp, env.SESSION_SECRET);
 
   return Response.json(
     { ok: true },
     {
-      status: 200,
       headers: {
-        "cache-control": "no-store",
         "set-cookie":
-          `${COOKIE_NAME}=${cookieValue}; Path=/; Max-Age=${SESSION_DURATION_SECONDS}; HttpOnly; Secure; SameSite=Lax`,
+          `${COOKIE_NAME}=${timestamp}.${signature}; Path=/; Max-Age=${SESSION_SECONDS}; HttpOnly; Secure; SameSite=Lax`,
+        "cache-control": "no-store",
       },
     },
   );
+}
+
+function isH3SwallowedErrorBody(body: string): boolean {
+  try {
+    const payload = JSON.parse(body) as {
+      unhandled?: unknown;
+      message?: unknown;
+    };
+
+    return payload.unhandled === true && payload.message === "HTTPError";
+  } catch {
+    return false;
+  }
 }
 
 async function normalizeCatastrophicSsrResponse(
@@ -342,36 +275,49 @@ async function normalizeCatastrophicSsrResponse(
 ): Promise<Response> {
   if (response.status < 500) return response;
 
-  const captured = consumeLastCapturedError();
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) return response;
 
-  if (!captured) return response;
+  const body = await response.clone().text();
+  if (!isH3SwallowedErrorBody(body)) return response;
+
+  console.error(
+    consumeLastCapturedError() ??
+      new Error(`h3 swallowed SSR error: ${body}`),
+  );
 
   return htmlResponse(renderErrorPage(), 500);
 }
 
+/**
+ * IMPORTANT:
+ * TanStack Start may invoke this entry as an internal SSR handler with
+ * only a Request. Cloudflare's Worker env is not guaranteed to be passed
+ * to this function. Never assume secrets exist here.
+ */
+
 export default {
-  async fetch(
-    request: Request,
-    env?: Env,
-    _ctx?: unknown,
-  ): Promise<Response> {
+  async fetch(request: Request, env?: Env, ctx?: unknown) {
     try {
-      const runtimeEnv = getEnv(env);
+      // Nitro sets this from the actual Cloudflare Worker environment.
+      const workerEnv = (
+        globalThis as typeof globalThis & { __env__?: Env }
+      ).__env__;
+
+      const runtimeEnv = env ?? workerEnv;
       const url = new URL(request.url);
 
-      // Never allow the site to fall through unprotected if secrets are missing.
-      if (!runtimeEnv.BIRTHDAY_PASSCODE || !runtimeEnv.SESSION_SECRET) {
-        if (url.pathname === "/__birthday_unlock") {
-          return Response.json(
-            { error: "Password protection is not configured on the server." },
-            { status: 503, headers: { "cache-control": "no-store" } },
-          );
-        }
-
-        return htmlResponse(
-          loginPage("Password protection is not configured on the server."),
-          503,
-        );
+      // Never allow access if the secrets aren't available.
+      if (
+        !runtimeEnv?.BIRTHDAY_PASSCODE ||
+        !runtimeEnv?.SESSION_SECRET
+      ) {
+        return url.pathname === "/__birthday_unlock"
+          ? Response.json(
+              { error: "Password protection is not configured." },
+              { status: 503, headers: { "cache-control": "no-store" } },
+            )
+          : htmlResponse(loginPage(), 503);
       }
 
       if (url.pathname === "/__birthday_unlock") {
@@ -387,7 +333,7 @@ export default {
 
       return await normalizeCatastrophicSsrResponse(response);
     } catch (error) {
-      console.error("Birthday site request failed:", error);
+      console.error(error);
       return htmlResponse(renderErrorPage(), 500);
     }
   },
