@@ -27,7 +27,7 @@ export const story = {
 
   music: {
     /** Put an mp3 in /public/music/ and set e.g. "/music/song.mp3". Leave empty for a soft generated ambient pad. */
-    src: "",
+    src: "/music/jaanu-bday-theme.mp3",
     label: "Sound",
   },
 
