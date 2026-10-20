@@ -83,7 +83,7 @@ button:disabled{opacity:.6}
 <input id="code" type="password" inputmode="numeric" pattern="[0-9]{6}"
 maxlength="6" minlength="6" autocomplete="one-time-code"
 placeholder="••••••" aria-label="Six digit access code" required>
-<button type="submit">Open your story →</button>
+<button type="submit">open the story →</button>
 <div id="error" role="status" aria-live="polite"></div>
 </form>
 </main>

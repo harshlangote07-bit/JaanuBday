@@ -5,18 +5,19 @@ import { Particles } from "./Particles";
 
 export function IntroScene({ onNext }: { onNext: () => void }) {
   const root = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (prefersReducedMotion()) return;
-    const ctx = gsap.context(() => {
-      const tl = gsap.timeline({ defaults: { ease: "power3.out" } });
-      tl.from(".intro-glow", { opacity: 0, scale: 0.4, duration: 3 })
-        .from(".intro-whisper", { opacity: 0, letterSpacing: "0.8em", duration: 2 }, 0.6)
-        .from(".intro-line .word", { yPercent: 110, opacity: 0, stagger: 0.08, duration: 1.4 }, 1.2)
-        .from(".intro-line", { filter: "blur(12px)", stagger: 1, duration: 2 }, 1.2)
-        .from(".chapter-cta", { opacity: 0, y: 20, duration: 1.2 }, "-=0.4");
-    }, root);
-    return () => ctx.revert();
-  }, []);
+useEffect(() => {
+  if (prefersReducedMotion()) return;
+  const ctx = gsap.context(() => {
+    gsap.set(".intro-line .word", { yPercent: 0, opacity: 1 });
+    const tl = gsap.timeline({ defaults: { ease: "power3.out" } });
+    tl.from(".intro-glow", { opacity: 0, scale: 0.4, duration: 3 })
+      .from(".intro-whisper", { opacity: 0, letterSpacing: "0.8em", duration: 2 }, 0.6)
+      .from(".intro-line .word", { yPercent: 110, opacity: 0, stagger: 0.08, duration: 1.4, clearProps: "transform,opacity" }, 1.2)
+      .from(".intro-line", { filter: "blur(12px)", stagger: 1, duration: 2, clearProps: "filter" }, 1.2)
+      .from(".chapter-cta", { opacity: 0, y: 20, duration: 1.2, clearProps: "transform,opacity" }, "-=0.4");
+  }, root);
+  return () => ctx.revert();
+}, []);
 
   return (
     <section ref={root} className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden px-6 text-center">

@@ -3,213 +3,148 @@ import { gsap, prefersReducedMotion } from "@/lib/motion";
 import { story } from "@/data/story";
 import { Particles } from "./Particles";
 
+/**
+ * Cinematic letter reveal — calm, slow, one continuous shot.
+ * Click → letterbox bars close in, the envelope opens and fades into the dark,
+ * the letter fades up with a slow camera push, then each line appears in turn.
+ */
 export function LetterReveal({ onNext }: { onNext: () => void }) {
   const c = story.letter;
   const paragraphs: string[] = Array.isArray(c.paragraphs) ? c.paragraphs : [];
   const root = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
-  const [unfolded, setUnfolded] = useState(false);
+  const [ready, setReady] = useState(false);
 
+  /* Idle: the envelope simply fades in and rests */
   useEffect(() => {
-    if (!open || !root.current) return;
-
-    const reduced = prefersReducedMotion();
+    if (open || !root.current) return;
     const ctx = gsap.context(() => {
-      const query = <T extends HTMLElement>(selector: string) =>
-        root.current?.querySelector<T>(selector) ?? null;
-
-      const flap = query<HTMLElement>(".l-flap");
-      const envelope = query<HTMLElement>(".l-envelope");
-      const letter = query<HTMLElement>(".l-letter");
-      const stage = query<HTMLElement>(".l-letter-stage");
-      const second = query<HTMLElement>(".l-fold-second");
-      const third = query<HTMLElement>(".l-fold-third");
-      const first = query<HTMLElement>(".l-fold-first");
-      const contents = Array.from(
-        root.current?.querySelectorAll<HTMLElement>(".l-fold-content") ?? []
-      );
-
-      if (!flap || !envelope || !letter || !stage || !first || !second || !third) {
-        setUnfolded(true);
-        return;
-      }
-
-      if (reduced) {
-        gsap.set(flap, { rotateX: 180 });
-        gsap.set(envelope, { autoAlpha: 0, y: 30 });
-        gsap.set(letter, { autoAlpha: 1, y: 0 });
-        gsap.set([second, third], { rotateX: 0, transformOrigin: "50% 0%" });
-        gsap.set(contents, { autoAlpha: 1, y: 0 });
-        requestAnimationFrame(() => {
-          const totalHeight = first.offsetHeight + second.offsetHeight + third.offsetHeight;
-          gsap.set(stage, { height: totalHeight });
-        });
-        setUnfolded(true);
-        return;
-      }
-
-      gsap.set(letter, { autoAlpha: 0, y: 14 });
-      gsap.set(stage, { height: 208 });
-      gsap.set(second, { rotateX: -180, transformOrigin: "50% 0%" });
-      gsap.set(third, { rotateX: -180, transformOrigin: "50% 0%" });
-      gsap.set(contents, { autoAlpha: 0, y: 8 });
-      if (contents[0]) gsap.set(contents[0], { autoAlpha: 1, y: 0 });
-      if (contents[1]) gsap.set(contents[1], { autoAlpha: 1, y: 0 });
-
-      const tl = gsap.timeline({
-        onComplete: () => {
-          // Switch to natural height after the folds finish so the signature
-          // and the button below it can never overlap or get clipped.
-          // Absolute/nested folds do not contribute to their parent's natural
-          // height, so explicitly size the stage to the sum of all three panels.
-          const totalHeight = first.offsetHeight + second.offsetHeight + third.offsetHeight;
-          gsap.set(stage, { height: totalHeight });
-          setUnfolded(true);
-        },
-      });
-
-      tl.to(flap, {
-        rotateX: 180,
-        duration: 0.7,
-        ease: "power2.inOut",
-      })
-        .to(
-          envelope,
-          {
-            y: 34,
-            autoAlpha: 0,
-            scale: 0.97,
-            duration: 0.5,
-            ease: "power2.in",
-          },
-          "-=0.05"
-        )
-        .to(
-          letter,
-          { autoAlpha: 1, y: 0, duration: 0.5, ease: "power3.out" },
-          "-=0.08"
-        )
-        .to(
-          second,
-          { rotateX: 0, duration: 0.9, ease: "power3.inOut" },
-          "+=0.22"
-        )
-        .to(stage, { height: 416, duration: 0.8, ease: "power2.inOut" }, "<")
-        .to(
-          third,
-          { rotateX: 0, duration: 0.9, ease: "power3.inOut" },
-          "+=0.22"
-        )
-        .to(stage, {
-          height: () => first.offsetHeight + second.offsetHeight + third.offsetHeight,
-          duration: 0.8,
-          ease: "power2.inOut",
-        }, "<")
-        .to(
-          contents,
-          {
-            autoAlpha: 1,
-            y: 0,
-            duration: 0.35,
-            stagger: 0.08,
-            ease: "power2.out",
-          },
-          "-=0.3"
-        );
+      if (prefersReducedMotion()) { gsap.set([".l-envelope-wrap", ".l-hint"], { autoAlpha: 1 }); return; }
+      gsap.fromTo(".l-envelope-wrap", { autoAlpha: 0, y: 16 }, { autoAlpha: 1, y: 0, duration: 1.6, ease: "power2.out" });
+      gsap.fromTo(".l-hint", { autoAlpha: 0 }, { autoAlpha: 1, duration: 1.2, delay: 1.2, ease: "sine.out" });
     }, root);
-
     return () => ctx.revert();
   }, [open]);
 
-  const panelClass =
-    "paper relative flex min-h-[208px] w-full flex-col justify-center border-b border-[color:var(--ink)]/15 px-6 py-7 sm:px-10 sm:py-9 md:px-14 md:py-10";
-  const contentClass = "l-fold-content";
+  /* The reveal */
+  useEffect(() => {
+    if (!open || !root.current) return;
+    let done = false;
+    const finish = () => {
+      if (!done) { done = true; setReady(true); }
+    };
+
+    const ctx = gsap.context(() => {
+      const lines = gsap.utils.toArray<HTMLElement>(".l-line");
+
+      if (prefersReducedMotion()) {
+        gsap.set([".l-letter", ".l-cta", ...lines], { autoAlpha: 1 });
+        gsap.set(".l-envelope-wrap", { autoAlpha: 0 });
+        finish();
+        return;
+      }
+
+      gsap.set(".l-letter", { autoAlpha: 0, scale: 1.06, y: 24 });
+      gsap.set(lines, { autoAlpha: 0, y: 10 });
+      gsap.set(".l-cta", { autoAlpha: 0, y: 10 });
+
+      const tl = gsap.timeline({ defaults: { ease: "sine.inOut" }, onComplete: finish });
+
+      tl
+        // Letterbox + dim: the room goes quiet
+        .to(".l-bar", { scaleY: 1, duration: 1.4, ease: "power2.inOut" }, 0)
+        .to(".l-dim", { autoAlpha: 1, duration: 1.6 }, 0)
+        // Envelope opens slowly
+        .to(".l-seal", { autoAlpha: 0, scale: 0.9, duration: 0.6 }, 0.2)
+        .to(".l-flap", { rotateX: 180, duration: 1.4, ease: "power2.inOut" }, 0.4)
+        // Envelope fades into the dark
+        .to(".l-envelope-wrap", { autoAlpha: 0, scale: 0.96, duration: 1.2 }, 1.5)
+        // Letter fades up with a slow camera push (crossfade, no gap)
+        .to(".l-letter", { autoAlpha: 1, y: 0, duration: 1.6, ease: "power2.out" }, 1.9)
+        .to(".l-letter", { scale: 1, duration: 3.2, ease: "power1.out" }, 1.9)
+        // Lines appear one after another
+        .to(lines, {
+          autoAlpha: 1, y: 0, duration: 1.1, ease: "power2.out",
+          stagger: Math.min(0.45, 2.6 / Math.max(lines.length, 1)),
+        }, 2.4)
+        // Bars ease back, button appears
+        .to(".l-bar", { scaleY: 0.4, duration: 1.4, ease: "power2.inOut" }, ">-0.6")
+        .to(".l-dim", { autoAlpha: 0.5, duration: 1.4 }, "<")
+        .to(".l-cta", { autoAlpha: 1, y: 0, duration: 0.9, ease: "power2.out" }, "<0.3");
+
+      const skip = () => tl.progress() < 1 && tl.timeScale(3);
+      root.current?.querySelector(".l-letter")?.addEventListener("click", skip);
+    }, root);
+
+    const safety = window.setTimeout(finish, 9000);
+    return () => { window.clearTimeout(safety); ctx.revert(); };
+  }, [open]);
+
+  const hide = { opacity: 0, visibility: "hidden" as const };
+  const ink = "var(--ink, var(--foreground))";
 
   return (
     <div ref={root}>
-      <section className="relative flex min-h-screen flex-col items-center justify-center overflow-x-hidden px-5 py-10 sm:py-12">
-        <Particles count={50} warm />
-        <p className="eyebrow relative mb-6 text-center">{c.eyebrow}</p>
+      <section className="relative flex min-h-[100svh] flex-col items-center justify-center overflow-hidden px-5 py-14">
+        <Particles count={30} warm />
 
-        <div className="relative mx-auto flex w-full max-w-2xl flex-col items-center">
-          <button
-            className={`l-envelope relative mx-auto block aspect-[3/2] w-[min(88vw,30rem)] cursor-pointer [perspective:900px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-8 focus-visible:outline-gold ${
-              open ? "pointer-events-none absolute inset-x-0 top-0" : ""
-            }`}
-            onClick={() => setOpen(true)}
-            aria-label="Open the letter"
-            disabled={open}
-          >
-            <div className="paper absolute inset-0 shadow-2xl" />
-            <svg
-              viewBox="0 0 300 200"
-              className="absolute inset-0 h-full w-full"
-              aria-hidden
-              preserveAspectRatio="none"
+        {/* Darkening */}
+        <div
+          aria-hidden
+          className="l-dim pointer-events-none absolute inset-0 z-0"
+          style={{ ...hide, background: `radial-gradient(ellipse at center, transparent 35%, color-mix(in oklab, ${ink} 60%, transparent) 100%)` }}
+        />
+        {/* Letterbox bars */}
+        <div aria-hidden className="l-bar pointer-events-none absolute inset-x-0 top-0 z-40 h-[7vh] origin-top" style={{ background: ink, transform: "scaleY(0)" }} />
+        <div aria-hidden className="l-bar pointer-events-none absolute inset-x-0 bottom-0 z-40 h-[7vh] origin-bottom" style={{ background: ink, transform: "scaleY(0)" }} />
+
+        <p className="eyebrow relative z-10 mb-8 text-center">{c.eyebrow}</p>
+
+        <div className="relative z-10 mx-auto grid w-full max-w-2xl place-items-center">
+          {/* Envelope */}
+          <div className="l-envelope-wrap col-start-1 row-start-1 flex flex-col items-center [perspective:1200px]" style={hide}>
+            <button
+              className="l-envelope relative block aspect-[3/2] w-[min(86vw,28rem)] cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-8"
+              onClick={() => !open && setOpen(true)}
+              aria-label="Open the letter"
+              disabled={open}
             >
-              <path d="M0 200 L150 95 L300 200Z" fill="var(--ink)" opacity=".08" />
-              <path d="M0 0 L150 120 L300 0" fill="none" stroke="var(--ink)" strokeOpacity=".15" />
-            </svg>
-            <div className="l-flap absolute inset-x-0 top-0 h-1/2 origin-top [transform-style:preserve-3d]">
-              <svg viewBox="0 0 300 100" className="h-full w-full" preserveAspectRatio="none" aria-hidden>
-                <path d="M0 0 L150 100 L300 0Z" fill="var(--paper)" stroke="var(--ink)" strokeOpacity=".15" />
+              <div className="paper absolute inset-0 shadow-2xl" />
+              <svg viewBox="0 0 300 200" className="absolute inset-0 z-10 h-full w-full" aria-hidden preserveAspectRatio="none">
+                <path d="M0 0 L150 112 L0 200Z" fill="var(--paper)" stroke={ink} strokeOpacity=".12" />
+                <path d="M300 0 L150 112 L300 200Z" fill="var(--paper)" stroke={ink} strokeOpacity=".12" />
+                <path d="M0 200 L150 100 L300 200Z" fill="var(--paper)" stroke={ink} strokeOpacity=".15" />
               </svg>
-            </div>
-            <span className="absolute left-1/2 top-1/2 flex h-14 w-14 -translate-x-1/2 -translate-y-1/3 items-center justify-center rounded-full bg-accent font-display text-2xl italic text-accent-foreground shadow-lg">
-              {story.recipient.name[0]}
-            </span>
-          </button>
+              <div className="l-flap absolute inset-x-0 top-0 z-20 h-[58%] origin-top">
+                <svg viewBox="0 0 300 100" className="h-full w-full drop-shadow-md" preserveAspectRatio="none" aria-hidden>
+                  <path d="M0 0 L150 100 L300 0Z" fill="var(--paper)" stroke={ink} strokeOpacity=".18" />
+                </svg>
+              </div>
+              <span className="l-seal absolute left-1/2 top-[58%] z-30 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-accent font-display text-2xl italic text-accent-foreground shadow-lg">
+                {story.recipient.name[0]}
+              </span>
+            </button>
+            {!open && <p className="l-hint eyebrow mt-10 text-center text-muted-foreground">{c.openHint}</p>}
+          </div>
 
-          {!open && <p className="eyebrow mt-8 text-center text-muted-foreground">{c.openHint}</p>}
-
+          {/* Letter */}
           {open && (
-            <article
-              className="l-letter relative z-10 mx-auto mt-0 w-full max-w-xl [perspective:1400px]"
-              style={{ opacity: 0 }}
-              aria-label="Birthday letter"
-            >
-              <div className="l-letter-stage relative mx-auto w-full overflow-visible" style={{ height: 208 }}>
-                <div className="l-fold-first paper relative z-30 min-h-[208px] w-full [transform-style:preserve-3d]">
-                  <div className={panelClass}>
-                    <h2 className={`${contentClass} font-display text-3xl italic sm:text-4xl`}>{c.greeting}</h2>
-                    {paragraphs[0] && (
-                      <p className={`${contentClass} mt-5 font-display text-lg leading-relaxed sm:text-xl md:text-2xl`}>
-                        {paragraphs[0]}
-                      </p>
-                    )}
-                  </div>
-
-                  <div
-                    className="l-fold-second paper absolute inset-x-0 top-full z-20 origin-top [backface-visibility:hidden] [transform-style:preserve-3d]"
-                    style={{ transform: "rotateX(-180deg)" }}
-                  >
-                    <div className={panelClass}>
-                      {paragraphs.slice(1, 3).map((paragraph, index) => (
-                        <p key={`middle-${index}`} className={`${contentClass} ${index ? "mt-5" : ""} font-display text-lg leading-relaxed sm:text-xl md:text-2xl`}>
-                          {paragraph}
-                        </p>
-                      ))}
-                    </div>
-
-                    <div
-                      className="l-fold-third paper absolute inset-x-0 top-full z-10 origin-top [backface-visibility:hidden] [transform-style:preserve-3d]"
-                      style={{ transform: "rotateX(-180deg)" }}
-                    >
-                      <div className={`${panelClass} border-b-0`}>
-                        <p className={`${contentClass} font-display text-lg italic sm:text-xl`}>{c.signoff}</p>
-                        <p className={`${contentClass} mt-2 font-display text-4xl italic sm:text-5xl`}>{c.signature}</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+            <article className="l-letter col-start-1 row-start-1 w-full max-w-xl will-change-transform" style={hide} aria-label="Birthday letter">
+              <div className="paper px-6 py-10 shadow-2xl sm:px-10 sm:py-12 md:px-14 md:py-14">
+                <h2 className="l-line font-display text-3xl italic sm:text-4xl">{c.greeting}</h2>
+                {paragraphs.map((p, i) => (
+                  <p key={i} className="l-line mt-5 font-display text-lg leading-relaxed sm:text-xl md:text-2xl">{p}</p>
+                ))}
+                <p className="l-line mt-8 font-display text-lg italic sm:text-xl">{c.signoff}</p>
+                <p className="l-line mt-2 font-display text-4xl italic sm:text-5xl">{c.signature}</p>
               </div>
             </article>
           )}
         </div>
 
         {open && (
-          <div className="relative z-20 mx-auto mt-8 flex w-full shrink-0 justify-center pb-8">
-            <button className="btn-story" onClick={onNext} disabled={!unfolded}>
+          <div className="l-cta relative z-20 mx-auto mt-10 flex justify-center pb-[max(2rem,env(safe-area-inset-bottom))]" style={hide}>
+            <button className="btn-story" onClick={onNext} disabled={!ready} aria-disabled={!ready}>
               {c.cta} <span aria-hidden>→</span>
             </button>
           </div>
