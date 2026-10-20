@@ -44,7 +44,7 @@ beginning: {
   body: "The way you laugh, the little things you notice, the warmth you bring without even trying. It's almost unfair how effortlessly you make ordinary things feel special. If magic ever took the shape of a person, I think it would look a little like you Jaanu.",
   photos: [
     { src: "/photos/photo-7.jpg", alt: "Laughing in the golden light", caption: "that smile of yours", aspect: 3 / 4, rotate: -4, depth: 0.6 },
-    { src: "/photos/photo-8.jpg", alt: "Warm lights under the evening sky", caption: "your little kind of magic", aspect: 4 / 5, rotate: 5, depth: 1 },
+    { src: "/photos/photo-8.jpg", alt: "Warm lights under the evening sky", caption: "You're pure magic", aspect: 4 / 5, rotate: 5, depth: 1 },
     { src: "/photos/photo-2.jpg", alt: "Walking by the sea at dusk", caption: "beautiful without even trying", aspect: 4 / 3, rotate: -2, depth: 0.3 },
   ] as Photo[],
   cta: "There's more to you",
